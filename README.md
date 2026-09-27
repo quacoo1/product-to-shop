@@ -1,6 +1,34 @@
 # Product Collector
 
-A local browser app for collecting product details, gallery images, and sizes from ASOS, Boohoo, and PrettyLittleThing. Paste up to 50 product links, review the results, and download Shopify CSV, structured JSON, or an image ZIP.
+A browser app for collecting product details, gallery images, and sizes from ASOS, Boohoo, and PrettyLittleThing. Run locally or deploy to Vercel with Redis storage. Paste up to 50 product links, review the results, and download Shopify CSV, structured JSON, or an image ZIP.
+
+## Deploy to Vercel
+
+The Vite build contains the frontend. `api/handler.ts` provides the cloud API, and `vercel.json` routes all `/api/*` requests to it. Both must be deployed together; uploading only `dist` produces 404s for `/api/session` and `/api/batches`.
+
+1. Import the repository into Vercel with the repository root as the Root Directory. Use **Vite**, build command **npm run build**, output directory **dist**, and **Node.js 24.x**. Enable Fluid compute; the function is configured for 300 seconds.
+2. In the Vercel project, open **Storage → Create Database** and choose **Upstash Redis** from the Marketplace. Connect it to this project and the deployment environments you will use. This is durable storage, not the old `@vercel/kv` integration.
+3. Confirm the server environment contains `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. The Marketplace aliases `KV_REST_API_URL` and `KV_REST_API_TOKEN` also work.
+4. Add **COLLECTOR_PASSWORD**, at least 12 characters, under **Settings → Environment Variables**. This is the password you will enter on the app's sign-in screen. Never use a `VITE_` prefix for passwords or Redis credentials. Use separate storage for preview and production if you need stronger environment isolation; keys are also namespaced by project and environment.
+5. Deploy the updated repository. Redeploy after changing environment variables. Open the website and sign in. `/api/session` returns JSON with HTTP 401 before sign-in and HTTP 200 afterward; HTTP 503 explains missing configuration.
+
+Cloud batches, edits, requested quantities, and session records are stored in Redis for **seven days** (batch writes renew retention). They survive function cold starts and deployments. Sessions use secure HTTP-only cookies, and batches are private to the session that created them. Changing the access password invalidates existing sessions. Download exports before the session expires.
+
+Processing runs as bounded HTTP requests, one product per invocation. Keep the page open while collecting. Reopening the app resumes its latest collection and queued work. Atomic Redis updates and expiring worker leases prevent duplicate processing, preserve cancellation, and recover interrupted work. At most two products run concurrently across the deployment, with one per retailer; a product has a three-minute extraction deadline. Interrupted workers can take up to 210 seconds to be reclaimed. This is not an unattended background queue.
+
+Automatic browser fallback uses bundled serverless Chromium on Vercel. Retailer verification can still block cloud requests. **Upload saved page** replaces the desktop browser retry: open the same product in your browser, complete verification yourself, select the requested colour, save as HTML only, then provide that file and its full product URL. HTML is limited to 2 MB, parsed without executing its scripts, and not stored. If a share link cannot be resolved, start a new batch using the full product URL. If the retailer's save operation omits its product data, save the rendered page HTML instead. Image downloads still require publicly accessible retailer URLs.
+
+CSV, JSON, image previews, and ZIP downloads use streaming responses. ZIP generation allows up to four minutes of image downloads; any remaining images are listed as failures in its manifest. Export fewer images if needed. The original 15 MB per-image and 300 MB ZIP limits remain.
+
+For local testing of the cloud API, copy `.env.example` to the ignored `.env.local`, fill in your development Redis credentials and access password, then run:
+
+```powershell
+npm.cmd install
+npm.cmd run build
+npm.cmd run dev:cloud
+```
+
+Open **http://localhost:4318**. The normal `npm start` command below still runs the original local app without Redis or a password.
 
 ## Start on Windows
 
@@ -101,13 +129,13 @@ Selected gallery images are grouped by stable product handle and numbered in gal
 
 ## Session, data, and network limits
 
-- Two products are processed at a time, with one active extraction per retailer. Automatic requests have bounded timeouts and retries. Interactive sessions occupy an extraction slot.
-- Batches live only in server memory. Refreshing the same browser tab reconnects to its batch; restarting the server clears batches. Up to 20 recent batches are retained in memory; the oldest completed batch is discarded when needed.
+- Two products are processed at a time, with one active extraction per retailer. Automatic requests have bounded timeouts and retries. Local interactive sessions occupy an extraction slot.
+- In local mode, batches live only in server memory. Refreshing the same browser tab reconnects to its batch; restarting the server clears batches. Up to 20 recent batches are retained in memory; the oldest completed batch is discarded when needed. Cloud mode uses Redis retention described above and limits new batches to 20 per session per hour.
 - Product/color duplicates discovered after extraction are excluded. Exports deduplicate product IDs even if a duplicate is reselected.
 - URLs and redirects are restricted to supported retailer domains. Fetches reject private, loopback, link-local, and reserved network targets, including at DNS connection time. Download sizes are bounded, and image file signatures are validated.
 - The browser retry routes requests through the same public-only transport. No files are automatically written outside the app by extraction; exports go to your browser's download location.
 - The app does not crawl category pages or recommendations. It collects other product colours only when explicitly named in size notes. Legacy links that redirect to a category are reported as unavailable.
-- There is no database, cloud deployment, scheduled scraping, user account, persistent job history, or direct Shopify connection.
+- There is no scheduled scraping or direct Shopify connection. Cloud mode adds password-protected sessions and Redis persistence; local mode requires neither.
 
 ## Development and checks
 
@@ -128,6 +156,8 @@ The local API uses a per-process session token from `GET /api/session` in `X-Ses
 ## Implementation layout
 
 - `server/adapters/`: ASOS, Boohoo, and PLT extraction and shared parsers.
+- `api/handler.ts`, `vercel.json`: Vercel function entry point and routing.
+- `server/cloud/`: Redis state, cloud sessions, resumable processing, and upload retry.
 - `server/jobs.ts`, `server/browser.ts`, `server/network.ts`: queue, assisted browser, and guarded network requests.
 - `server/exports.ts`: Shopify CSV, versioned JSON, and streamed ZIP.
 - `src/`: plain TypeScript browser UI and styles.

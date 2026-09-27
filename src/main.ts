@@ -1,4 +1,5 @@
 import './style.css';
+import { ApiError, readApiJson, responseError } from './api';
 import type { Batch, ExtractionResult, Product } from '../shared/types';
 import { RETAILER_VENDORS } from '../shared/types';
 import { inputLinks, parseProductInput, quantityErrors } from '../shared/input';
@@ -29,13 +30,14 @@ app.innerHTML = `
     <div class="page-heading"><div><div class="eyebrow">PRODUCT IMPORTS</div><h1>From link to listing.</h1><p>Collect the details. Choose the images. Make it yours.</p></div><div class="steps"><span class="step active"><b>1</b> Collect</span><span class="step-line"></span><span class="step" id="review-step"><b>2</b> Review</span><span class="step-line"></span><span class="step" id="export-step"><b>3</b> Export</span></div></div>
     <div class="workspace-grid">
       <aside class="input-column">
+        <section class="panel login-panel" id="login-panel" hidden><h2>Sign in to your collector</h2><p class="muted">Enter the access password set for this app.</p><form id="login-form"><label class="field-label" for="access-password">Access password</label><input id="access-password" type="password" autocomplete="current-password" required><p id="login-error" class="error-text" role="alert"></p><button class="primary full" type="submit">Sign in ${icon('arrow')}</button></form></section>
         <section class="panel input-panel"><div class="panel-title"><h2>Add product links</h2><span class="number-pill">01</span></div><p class="muted">Paste product links or share messages with colour and UK size notes.</p>
           <div class="retailers"><span>ASOS</span><span>boohoo</span><span>PrettyLittleThing</span></div>
           <label class="field-label" for="links">Links and sizes <span id="link-count">0 / 50</span></label>
           <textarea id="links" spellcheck="false" placeholder="Check out this item I found on Boohoo https://bhoo.mobi/…&#10;White (UK 14,16,18)&#10;Cream floral (UK 10,12)&#10;Brown uk (16,16)" rows="9"></textarea>
           <p id="input-error" class="error-text" role="alert"></p>
           <div id="selection-preview" class="selection-preview" aria-live="polite" hidden></div>
-          <button class="primary full" id="collect">Collect products ${icon('arrow')}</button>
+          <button class="primary full" id="collect" disabled>Collect products ${icon('arrow')}</button>
           <div class="input-caption">${icon('link')} Add sizes to filter · plain links collect all sizes</div>
         </section>
         <section class="notes-panel"><span class="note-icon">${icon('file')}</span><div><h3>Ready for your Shopify drafts</h3><p>Prices are left out. Shopify defaults them to zero, so add your prices before publishing.</p><p class="small">Inventory tracking is enabled on import. Use the separate inventory CSV to stock a warehouse location, using the quantities in your size notes.</p></div></section>
@@ -53,10 +55,16 @@ app.innerHTML = `
   </main>
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="editor"><form id="edit-form"><div class="dialog-header"><div><span class="eyebrow">REVIEW PRODUCT</span><h2>Make it yours</h2></div><button type="button" data-close class="icon-button" aria-label="Close editor">${icon('close')}</button></div><div id="editor-content"></div><div class="dialog-footer"><p id="edit-error" class="error-text" role="alert"></p><button type="button" data-close class="secondary">Cancel</button><button type="submit" class="primary">Save changes ${icon('check')}</button></div></form></dialog>
+  <dialog id="html-dialog"><form id="html-form"><div class="dialog-header"><h2>Use a saved product page</h2><button type="button" id="html-close" class="icon-button" aria-label="Close upload">${icon('close')}</button></div><div class="upload-fields"><p>Open <a id="html-source-link" target="_blank" rel="noreferrer">the product page</a> in your browser and complete any verification yourself. Select the requested colour, then save the page as HTML only. Upload the saved file below.</p><label>Full product URL<input id="html-source-url" type="url" required placeholder="https://www.boohoo.com/product/…"></label><label>Saved HTML file (up to 2 MB)<input id="html-file" type="file" accept=".html,.htm,text/html" required></label><p class="muted small">Only the product page is needed. The file is parsed for product details and is not stored. If saving loses the page data, copy the rendered page HTML into a file instead.</p><p id="html-error" class="error-text" role="alert"></p></div><div class="dialog-footer"><button type="submit" class="primary">Extract saved page</button></div></form></dialog>
 `;
 
 let batch: Batch | undefined;
 let token = '';
+let cloudMode = false;
+let processing = false;
+let processErrorShown = false;
+let revision = 0;
+let uploadItemId: string | undefined;
 let busy = false;
 let downloading = false;
 let editedId: string | undefined;
@@ -64,6 +72,31 @@ let lastRender = '';
 let toastTimer: ReturnType<typeof setTimeout>;
 const input = document.querySelector<HTMLTextAreaElement>('#links')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
+const htmlDialog = document.querySelector<HTMLDialogElement>('#html-dialog')!;
+interface SessionInfo { token: string; mode?: string; latestBatch?: string; }
+function setCloudMode() {
+  cloudMode = true;
+  document.querySelector('.local-badge')!.innerHTML = '<span></span> CLOUD WORKSPACE';
+  document.querySelector('.session-note')!.textContent = 'Collections are saved for seven days. Keep this page open to process queued products; returning to the app resumes them.';
+}
+function showLogin() {
+  setCloudMode(); token = '';
+  document.querySelector<HTMLElement>('#login-panel')!.hidden = false;
+  document.querySelector<HTMLButtonElement>('#collect')!.disabled = true;
+}
+async function acceptSession(session: SessionInfo) {
+  if (!session.token) throw new Error('The backend did not return a session token. Check the deployment configuration.');
+  token = session.token;
+  if (session.mode === 'cloud') setCloudMode();
+  document.querySelector<HTMLElement>('#login-panel')!.hidden = true;
+  document.querySelector('#input-error')!.textContent = '';
+  document.querySelector<HTMLButtonElement>('#collect')!.disabled = false;
+  const saved = sessionStorage.getItem('collector-batch') || session.latestBatch;
+  if (saved) {
+    try { batch = await request<Batch>(`/batches/${saved}`); sessionStorage.setItem('collector-batch', batch.id); render(); }
+    catch { sessionStorage.removeItem('collector-batch'); }
+  }
+}
 function toast(message: string, error = false) {
   const element = document.querySelector<HTMLDivElement>('#toast')!;
   element.textContent = message; element.classList.toggle('toast-error', error); element.hidden = false;
@@ -71,9 +104,7 @@ function toast(message: string, error = false) {
 }
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, { ...options, headers: { 'Content-Type': 'application/json', 'X-Session-Token': token, ...options.headers } });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Request failed.');
-  return data;
+  return readApiJson<T>(response);
 }
 const urls = () => inputLinks(input.value);
 input.addEventListener('input', () => {
@@ -98,12 +129,12 @@ function productRow(item: ExtractionResult): string {
   const cover = p.images.find(i => i.included && i.validation === 'valid');
   const available = p.variants.filter(v => v.availability === 'available').length;
   const soldOut = p.variants.filter(v => v.availability === 'sold_out').length;
-  return `<article class="product-row ${p.included ? '' : 'excluded'}"><label class="selection"><input type="checkbox" data-include="${item.id}" ${p.included ? 'checked' : ''} aria-label="Include ${escape(p.title)} in exports"></label><div class="product-cover">${cover ? `<img src="${imagePath(item, cover.id)}" alt="${escape(cover.alt)}" loading="lazy">` : icon('image')}</div><div class="product-info"><div class="product-meta"><span>${retailerName(p.retailer)}</span><span>·</span><span>${escape(p.color || 'Color unspecified')}</span></div><h3>${escape(p.title || 'Untitled product')}</h3><div class="product-stats"><span>${p.variants.length} sizes</span><span>${p.images.filter(i => i.included).length} images</span>${soldOut ? `<span>${soldOut} sold out</span>` : available ? `<span>${available} available</span>` : ''}</div>${p.warnings.length ? `<details class="warnings"><summary>${icon('alert')} ${p.warnings.length} ${p.warnings.length === 1 ? 'note' : 'notes'} to review</summary><ul>${p.warnings.map(w => `<li>${escape(w)}</li>`).join('')}</ul></details>` : '<span class="ready-label">Ready to review</span>'}</div><div class="row-actions"><button class="secondary compact" data-edit="${item.id}">${icon('edit')} Review</button><button class="text-button small" data-action="browser" data-id="${item.id}">Retry in browser</button><a class="source-link" href="${escape(p.sourceUrl)}" target="_blank" rel="noreferrer">View source ↗</a></div></article>`;
+  return `<article class="product-row ${p.included ? '' : 'excluded'}"><label class="selection"><input type="checkbox" data-include="${item.id}" ${p.included ? 'checked' : ''} aria-label="Include ${escape(p.title)} in exports"></label><div class="product-cover">${cover ? `<img src="${imagePath(item, cover.id)}" alt="${escape(cover.alt)}" loading="lazy">` : icon('image')}</div><div class="product-info"><div class="product-meta"><span>${retailerName(p.retailer)}</span><span>·</span><span>${escape(p.color || 'Color unspecified')}</span></div><h3>${escape(p.title || 'Untitled product')}</h3><div class="product-stats"><span>${p.variants.length} sizes</span><span>${p.images.filter(i => i.included).length} images</span>${soldOut ? `<span>${soldOut} sold out</span>` : available ? `<span>${available} available</span>` : ''}</div>${p.warnings.length ? `<details class="warnings"><summary>${icon('alert')} ${p.warnings.length} ${p.warnings.length === 1 ? 'note' : 'notes'} to review</summary><ul>${p.warnings.map(w => `<li>${escape(w)}</li>`).join('')}</ul></details>` : '<span class="ready-label">Ready to review</span>'}</div><div class="row-actions"><button class="secondary compact" data-edit="${item.id}">${icon('edit')} Review</button><button class="text-button small" data-action="${cloudMode ? 'upload' : 'browser'}" data-id="${item.id}">${cloudMode ? 'Upload saved page' : 'Retry in browser'}</button><a class="source-link" href="${escape(p.sourceUrl)}" target="_blank" rel="noreferrer">View source ↗</a></div></article>`;
 }
 function statusRow(item: ExtractionResult): string {
   const active = ['queued', 'extracting'].includes(item.status);
-  const labels: Record<string, string> = { queued: 'In the queue', extracting: 'Collecting product details…', needs_browser: 'Browser retry needed', awaiting_user: 'Ready when you are', failed: 'Check this link', cancelled: 'Cancelled' };
-  return `<article class="status-row"><div class="status-icon ${active ? 'working' : ''}">${icon(active ? 'link' : 'alert')}</div><div class="status-info"><span class="product-meta">${retailerName(item.retailer)}</span><h3>${labels[item.status]}</h3><p class="url-preview">${escape(item.url)}</p>${item.selection ? `<p class="error-detail">Requested: ${escape(item.selection.notes.join(" · "))}</p>` : ""}${item.error ? `<p class="error-detail">${escape(item.error)}</p>` : ''}${item.status === 'awaiting_user' ? '<p class="error-detail">Complete any verification in the browser window, then choose Continue extraction.</p>' : ''}</div><div class="row-actions">${item.status === 'awaiting_user' ? `<button class="primary compact" data-action="resume" data-id="${item.id}">Continue extraction</button><button class="text-button" data-action="close-browser" data-id="${item.id}">Close browser</button>` : !active && item.retailer ? `<button class="secondary compact" data-action="browser" data-id="${item.id}">${icon('browser')} Retry in browser</button><button class="text-button" data-action="retry" data-id="${item.id}">Retry automatically</button>` : ''}</div></article>`;
+  const labels: Record<string, string> = { queued: 'In the queue', extracting: 'Collecting product details…', needs_browser: cloudMode ? 'Saved page needed' : 'Browser retry needed', awaiting_user: 'Ready when you are', failed: 'Check this link', cancelled: 'Cancelled' };
+  return `<article class="status-row"><div class="status-icon ${active ? 'working' : ''}">${icon(active ? 'link' : 'alert')}</div><div class="status-info"><span class="product-meta">${retailerName(item.retailer)}</span><h3>${labels[item.status]}</h3><p class="url-preview">${escape(item.url)}</p>${item.selection ? `<p class="error-detail">Requested: ${escape(item.selection.notes.join(" · "))}</p>` : ""}${item.error ? `<p class="error-detail">${escape(item.error)}</p>` : ''}${item.status === 'awaiting_user' ? '<p class="error-detail">Complete any verification in the browser window, then choose Continue extraction.</p>' : ''}</div><div class="row-actions">${item.status === 'awaiting_user' ? `<button class="primary compact" data-action="resume" data-id="${item.id}">Continue extraction</button><button class="text-button" data-action="close-browser" data-id="${item.id}">Close browser</button>` : !active && item.retailer ? `<button class="secondary compact" data-action="${cloudMode ? 'upload' : 'browser'}" data-id="${item.id}">${icon('browser')} ${cloudMode ? 'Upload saved page' : 'Retry in browser'}</button><button class="text-button" data-action="retry" data-id="${item.id}">Retry automatically</button>` : ''}</div></article>`;
 }
 function render() {
   if (!batch) return;
@@ -115,7 +146,7 @@ function render() {
   document.querySelector('#review-step')!.classList.toggle('active', products.length > 0);
   document.querySelector('#export-step')!.classList.toggle('active', selected.length > 0 && ready);
   const cancel = document.querySelector<HTMLButtonElement>('#cancel')!; cancel.hidden = !batch.running; cancel.disabled = busy;
-  document.querySelector<HTMLButtonElement>('#collect')!.disabled = batch.running || busy;
+  document.querySelector<HTMLButtonElement>('#collect')!.disabled = !token || batch.running || busy;
   const progress = document.querySelector<HTMLDivElement>('#progress')!; progress.hidden = false;
   progress.innerHTML = `<div class="progress-label"><span>${batch.running ? 'Collecting your products' : batch.cancelled ? 'Batch cancelled' : 'Collection complete'}</span><span>${finished} / ${batch.items.length} links${batch.duplicates ? ` · ${batch.duplicates} duplicate${batch.duplicates === 1 ? '' : 's'} skipped` : ''}</span></div><progress value="${finished}" max="${batch.items.length || 1}" aria-label="Extraction progress"></progress>`;
   const serialized = JSON.stringify(batch.items);
@@ -125,26 +156,37 @@ function render() {
   document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.disabled = busy);
 }
 async function mutate(path: string, body?: unknown, method = 'POST') {
-  busy = true; render();
+  revision++; busy = true; render();
   try { batch = await request<Batch>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); render(); }
-  finally { busy = false; render(); }
+  finally { revision++; busy = false; render(); }
 }
 document.querySelector('#collect')!.addEventListener('click', async () => {
   const error = document.querySelector('#input-error')!; error.textContent = '';
+  if (!token) { error.textContent = 'Connect the backend and refresh before collecting products.'; return; }
   const links = urls();
   if (!links.length || links.length > 50) { error.textContent = 'Add between 1 and 50 product links, with optional colour and UK size notes.'; return; }
   try { parseProductInput(input.value); } catch (e) { error.textContent = (e as Error).message; return; }
   const button = document.querySelector<HTMLButtonElement>('#collect')!; button.disabled = true; busy = true;
+  revision++;
   try {
     batch = await request<Batch>('/batches', { method: 'POST', body: JSON.stringify({ text: input.value }) });
     sessionStorage.setItem('collector-batch', batch.id); lastRender = ''; render();
   } catch (e) { error.textContent = (e as Error).message; }
-  finally { busy = false; button.disabled = false; render(); }
+  finally { revision++; busy = false; button.disabled = !token; render(); }
 });
 document.querySelector('#cancel')!.addEventListener('click', () => { if (batch) void mutate(`/batches/${batch.id}/cancel`).catch(e => toast(e.message, true)); });
 document.querySelector('#results')!.addEventListener('click', async event => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button || !batch) return;
   if (button.dataset.edit) { showEditor(button.dataset.edit); return; }
+  if (button.dataset.action === 'upload') {
+    const item = batch.items.find(i => i.id === button.dataset.id)!;
+    uploadItemId = item.id;
+    document.querySelector<HTMLAnchorElement>('#html-source-link')!.href = item.resolvedUrl || item.url;
+    document.querySelector<HTMLInputElement>('#html-source-url')!.value = item.resolvedUrl || (item.url.includes('.mobi/') ? '' : item.url);
+    document.querySelector<HTMLInputElement>('#html-file')!.value = '';
+    document.querySelector('#html-error')!.textContent = '';
+    htmlDialog.showModal(); return;
+  }
   if (button.dataset.action) {
     if (button.dataset.action === 'browser') toast('Opening a browser window. Complete any verification there, then return here.');
     try { await mutate(`/batches/${batch.id}/items/${button.dataset.id}/${button.dataset.action}`); }
@@ -196,7 +238,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-export]').forEach(button => 
     const location = document.querySelector<HTMLInputElement>('#inventory-location')!.value;
     const query = format === 'inventory' ? `?location=${encodeURIComponent(location)}` : '';
     const response = await fetch(`/api/batches/${batch.id}/export/${format}${query}`, { headers: { 'X-Session-Token': token } });
-    if (!response.ok) throw new Error((await response.json()).error);
+    if (!response.ok) throw new Error(await responseError(response));
     const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a');
     link.href = url; link.download = format === 'csv' ? 'shopify-products.csv' : format === 'inventory' ? 'shopify-inventory.csv' : format === 'zip' ? 'product-images.zip' : 'products.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
     toast(format === 'zip' ? 'Image ZIP downloaded. Check manifest.json for any image failures.' : format === 'inventory' ? 'Inventory CSV downloaded. Import it under Shopify Products → Inventory after importing the products.' : `${format.toUpperCase()} downloaded.`);
@@ -204,18 +246,64 @@ document.querySelectorAll<HTMLButtonElement>('[data-export]').forEach(button => 
   finally { downloading = false; render(); }
 }));
 async function poll() {
-  if (batch && !busy && !dialog.open && batch.running) {
-    try { batch = await request<Batch>(`/batches/${batch.id}`); render(); }
+  if (batch && token && !busy && !dialog.open && !htmlDialog.open && batch.running) {
+    const id = batch.id; const version = revision;
+    try {
+      const latest = await request<Batch>(`/batches/${id}`);
+      if (batch?.id === id && revision === version && !busy && !dialog.open && !htmlDialog.open) { batch = latest; render(); }
+    }
     catch (e) { toast(`Connection interrupted: ${(e as Error).message}`, true); }
   }
-  setTimeout(poll, 1500);
+  if (cloudMode && token && batch?.running && !busy) void processCloud();
+  setTimeout(poll, cloudMode ? 2500 : 1500);
 }
+async function processCloud() {
+  if (processing || !batch?.running || !token) return;
+  processing = true;
+  try { await request(`/batches/${batch.id}/process`, { method: 'POST' }); processErrorShown = false; }
+  catch (error) {
+    if (error instanceof ApiError && error.status === 401) showLogin();
+    if (!processErrorShown) { toast(`Processing paused: ${(error as Error).message}`, true); processErrorShown = true; }
+  } finally { processing = false; }
+}
+document.querySelector('#login-form')!.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = document.querySelector<HTMLButtonElement>('#login-form button')!; button.disabled = true;
+  document.querySelector('#login-error')!.textContent = '';
+  try {
+    const password = document.querySelector<HTMLInputElement>('#access-password')!;
+    const session = await request<SessionInfo>('/login', { method: 'POST', body: JSON.stringify({ password: password.value }) });
+    password.value = ''; await acceptSession(session);
+  } catch (error) { document.querySelector('#login-error')!.textContent = (error as Error).message; }
+  finally { button.disabled = false; }
+});
+document.querySelector('#html-close')!.addEventListener('click', () => { if (!busy) htmlDialog.close(); });
+document.querySelector('#html-form')!.addEventListener('submit', async event => {
+  event.preventDefault(); if (!batch || !uploadItemId) return;
+  const button = document.querySelector<HTMLButtonElement>('#html-form [type="submit"]')!; button.disabled = true;
+  const error = document.querySelector('#html-error')!; error.textContent = '';
+  try {
+    const file = document.querySelector<HTMLInputElement>('#html-file')!.files?.[0];
+    if (!file || file.size > 2 * 1024 * 1024) throw new Error('Choose an HTML file up to 2 MB.');
+    await mutate(`/batches/${batch.id}/items/${uploadItemId}/html`, {
+      html: await file.text(), sourceUrl: document.querySelector<HTMLInputElement>('#html-source-url')!.value,
+    });
+    htmlDialog.close(); toast('Saved page processed. Review the product details and any notes.');
+  } catch (failure) { error.textContent = (failure as Error).message; }
+  finally { button.disabled = false; }
+});
 async function init() {
   try {
-    token = (await request<{token:string}>('/session')).token;
-    const saved = sessionStorage.getItem('collector-batch');
-    if (saved) { try { batch = await request<Batch>(`/batches/${saved}`); render(); } catch { sessionStorage.removeItem('collector-batch'); } }
-  } catch { toast('Could not connect to the local app. Start the server, then refresh.', true); }
+    const response = await fetch('/api/session');
+    if (response.status === 401 && response.headers.get('content-type')?.includes('application/json') && (await response.clone().json()).loginRequired) showLogin();
+    else await acceptSession(await readApiJson<SessionInfo>(response));
+  } catch (error) {
+    token = '';
+    document.querySelector<HTMLButtonElement>('#collect')!.disabled = true;
+    const message = `Could not connect to the backend. ${error instanceof Error ? error.message : 'Check the server and refresh.'}`;
+    document.querySelector('#input-error')!.textContent = message;
+    toast(message, true);
+  }
   void poll();
 }
 void init();

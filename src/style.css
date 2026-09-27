@@ -6,3 +6,4 @@
 
 .inventory-export{border-top:1px solid var(--line);margin-top:22px;padding-top:22px}.inventory-export h3{font-size:15px}.inventory-export .field-label{margin-top:16px}.inventory-export input{max-width:320px;display:block;margin-bottom:12px}.inventory-export .export-footnote{margin-top:12px}
 .selection-preview{font-size:12px;line-height:1.6;margin-top:12px;padding:12px;background:#f6f7fb;border:1px solid var(--line);border-radius:7px;overflow-wrap:anywhere}.selection-preview>div+div{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+.login-panel{padding:24px;margin-bottom:20px}.login-panel .muted{margin:10px 0 18px}.upload-fields{display:grid;gap:18px;padding:24px;font-size:14px;line-height:1.7}.upload-fields label{display:grid;gap:8px}.upload-fields a{color:var(--blue)}

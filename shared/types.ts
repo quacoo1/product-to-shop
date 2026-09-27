@@ -50,6 +50,7 @@ export interface Product {
 }
 export type ItemStatus = 'queued' | 'extracting' | 'needs_browser' | 'awaiting_user' | 'success' | 'failed' | 'cancelled';
 export interface ExtractionResult {
+  resolvedUrl?: string;
   selection?: RequestedSelection;
   id: string;
   url: string;

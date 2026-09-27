@@ -11,8 +11,14 @@ export async function openProductBrowser(url: string, headed: boolean, signal: A
   url = withRequestedColor(await resolveProductLink(url, signal), color);
   let browser: Browser;
   const edge = process.platform === 'win32' && ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'].some(existsSync);
-  try { browser = await chromium.launch({ headless: !headed, ...(edge ? { channel: 'msedge' } : {}) }); }
-  catch { throw new Error('Browser could not start. Close stale browser windows or run npm run browser:install, then retry.'); }
+  try {
+    if (process.env.VERCEL) {
+      if (headed) throw new Error('Use saved HTML upload for browser retry on Vercel.');
+      const { default: serverlessChromium } = await import('@sparticuz/chromium');
+      browser = await chromium.launch({ headless: true, executablePath: await serverlessChromium.executablePath(), args: serverlessChromium.args });
+    } else browser = await chromium.launch({ headless: !headed, ...(edge ? { channel: 'msedge' } : {}) });
+  }
+  catch { throw new Error(process.env.VERCEL ? 'Cloud browser could not start. Retry automatically or upload the saved product page.' : 'Browser could not start. Close stale browser windows or run npm run browser:install, then retry.'); }
   const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
   const retailer = productUrl(url).retailer;
   // Every browser request goes through the same DNS-pinned public-only transport.

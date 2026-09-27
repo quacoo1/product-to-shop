@@ -4,3 +4,7 @@ dist/
 .sites-runtime/
 test-results/
 *.log
+.env
+.env.*
+!.env.example
+.vercel/

@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": { "node": "24.x" },
   "scripts": {
     "dev": "tsx server/index.ts",
+    "dev:cloud": "node --env-file-if-exists=.env.local --import tsx scripts/dev-cloud.ts",
     "start": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
     "test": "tsx --test tests/*.test.ts",
@@ -13,6 +15,8 @@
     "check:api": "tsx scripts/check-api.ts"
   },
   "dependencies": {
+    "@sparticuz/chromium": "153.0.0",
+    "@upstash/redis": "^1.39.0",
     "archiver": "^7.0.1",
     "cheerio": "^1.1.0",
     "express": "^5.1.0",
