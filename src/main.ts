@@ -18,6 +18,7 @@ const icon = (name: string, cls = '') => {
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 17 5-5 4 4 4-6 5 7"/><circle cx="8" cy="8" r="1"/>',
     edit: '<path d="m14 5 5 5M4 20l5-1L21 7l-5-5L4 14z"/>',
     alert: '<path d="m12 3 10 18H2zM12 9v5m0 3v1"/>',
+    lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
   };
   return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.file}</svg>`;
 };
@@ -25,12 +26,35 @@ const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char 
 const retailerName = (retailer?: string) => ({ asos: 'ASOS', boohoo: 'Boohoo', prettylittlething: 'PrettyLittleThing' }[retailer ?? ''] || 'Link');
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
-  <header class="topbar"><a class="brand" href="/" aria-label="Product Collector home"><span class="brand-mark">${icon('bag')}</span>product<span class="brand-light">collector</span></a><span class="local-badge"><span></span> LOCAL WORKSPACE</span></header>
-  <main class="workspace">
+  <header class="topbar"><a class="brand" href="/" aria-label="Product Collector home"><span class="brand-mark">${icon('bag')}</span>product<span class="brand-light">collector</span></a><div class="account-actions"><span class="local-badge"><span></span> YOUR WORKSPACE</span><button id="sign-out" class="secondary compact" hidden>Sign out</button></div></header>
+  <main id="login-screen" class="login-screen" aria-labelledby="login-title">
+    <section class="login-intro">
+      <span class="eyebrow">A LITTLE LESS ADMIN. A LOT MORE POSSIBILITY.</span>
+      <h1>Your next collection<br>starts here.</h1>
+      <p>Bring your product links together. Fine-tune the details, choose your sizes, and get your next listings ready.</p>
+      <div class="login-workflow" aria-label="Your workflow"><span>${icon('link')} Collect</span><i aria-hidden="true"></i><span>${icon('edit')} Review</span><i aria-hidden="true"></i><span>${icon('download')} Export</span></div>
+      <div class="login-retailers"><span>MADE FOR YOUR FINDS FROM</span><div>ASOS <b>boohoo</b> PrettyLittleThing</div></div>
+    </section>
+    <section class="login-card">
+      <div class="login-symbol">${icon('lock')}</div><span class="eyebrow">PRODUCT COLLECTOR</span>
+      <h2 id="login-title">Welcome back.</h2><p class="login-description">Sign in to collect, review, and export your products.</p>
+      <div id="connection-state" class="connection-state" role="status"><span class="working">Checking your session…</span></div>
+      <button id="retry-connection" class="secondary full" hidden>Try again ${icon('arrow')}</button>
+      <form id="login-form" hidden>
+        <label class="field-label" for="access-password">Access password</label>
+        <div class="password-field"><input id="access-password" type="password" autocomplete="current-password" placeholder="Enter your password" aria-describedby="password-help login-error" required><button id="toggle-password" type="button" aria-label="Show password" aria-controls="access-password" aria-pressed="false">Show</button></div>
+        <p id="login-error" class="error-text" role="alert"></p>
+        <button id="login-submit" class="primary full" type="submit">Sign in ${icon('arrow')}</button>
+        <p id="password-help" class="password-help">Use your workspace access password. If you don’t have it, ask the person who set up this app.</p>
+      </form>
+      <div class="login-card-footer">${icon('lock')} Your workspace, ready when you are.</div>
+    </section>
+    <p class="login-bottom-note">From your favourite finds to your next Shopify drafts.</p>
+  </main>
+  <main class="workspace" hidden>
     <div class="page-heading"><div><div class="eyebrow">PRODUCT IMPORTS</div><h1>From link to listing.</h1><p>Collect the details. Choose the images. Make it yours.</p></div><div class="steps"><span class="step active"><b>1</b> Collect</span><span class="step-line"></span><span class="step" id="review-step"><b>2</b> Review</span><span class="step-line"></span><span class="step" id="export-step"><b>3</b> Export</span></div></div>
     <div class="workspace-grid">
       <aside class="input-column">
-        <section class="panel login-panel" id="login-panel" hidden><h2>Sign in to your collector</h2><p class="muted">Enter the access password set for this app.</p><form id="login-form"><label class="field-label" for="access-password">Access password</label><input id="access-password" type="password" autocomplete="current-password" required><p id="login-error" class="error-text" role="alert"></p><button class="primary full" type="submit">Sign in ${icon('arrow')}</button></form></section>
         <section class="panel input-panel"><div class="panel-title"><h2>Add product links</h2><span class="number-pill">01</span></div><p class="muted">Paste product links or share messages with colour and UK size notes.</p>
           <div class="retailers"><span>ASOS</span><span>boohoo</span><span>PrettyLittleThing</span></div>
           <label class="field-label" for="links">Links and sizes <span id="link-count">0 / 50</span></label>
@@ -73,6 +97,15 @@ let toastTimer: ReturnType<typeof setTimeout>;
 const input = document.querySelector<HTMLTextAreaElement>('#links')!;
 const dialog = document.querySelector<HTMLDialogElement>('#editor')!;
 const htmlDialog = document.querySelector<HTMLDialogElement>('#html-dialog')!;
+const loginScreen = document.querySelector<HTMLElement>('#login-screen')!;
+const workspace = document.querySelector<HTMLElement>('.workspace')!;
+const loginForm = document.querySelector<HTMLFormElement>('#login-form')!;
+const passwordInput = document.querySelector<HTMLInputElement>('#access-password')!;
+const loginButton = document.querySelector<HTMLButtonElement>('#login-submit')!;
+const signOutButton = document.querySelector<HTMLButtonElement>('#sign-out')!;
+const connectionState = document.querySelector<HTMLElement>('#connection-state')!;
+const retryConnection = document.querySelector<HTMLButtonElement>('#retry-connection')!;
+const emptyResults = document.querySelector('#results')!.innerHTML;
 interface SessionInfo { token: string; mode?: string; latestBatch?: string; }
 function setCloudMode() {
   cloudMode = true;
@@ -81,21 +114,37 @@ function setCloudMode() {
 }
 function showLogin() {
   setCloudMode(); token = '';
-  document.querySelector<HTMLElement>('#login-panel')!.hidden = false;
+  revision++;
+  workspace.hidden = true; loginScreen.hidden = false; loginForm.hidden = false;
+  connectionState.hidden = true; retryConnection.hidden = true; signOutButton.hidden = true;
+  dialog.close(); htmlDialog.close();
+  document.title = 'Sign in · Product Collector';
+  passwordInput.focus();
   document.querySelector<HTMLButtonElement>('#collect')!.disabled = true;
 }
 async function acceptSession(session: SessionInfo) {
   if (!session.token) throw new Error('The backend did not return a session token. Check the deployment configuration.');
   token = session.token;
   if (session.mode === 'cloud') setCloudMode();
-  document.querySelector<HTMLElement>('#login-panel')!.hidden = true;
   document.querySelector('#input-error')!.textContent = '';
   document.querySelector<HTMLButtonElement>('#collect')!.disabled = false;
+  batch = undefined; lastRender = ''; processErrorShown = false;
+  document.querySelector('#results')!.innerHTML = emptyResults;
+  document.querySelector('#product-count')!.textContent = '0';
+  document.querySelector<HTMLElement>('#progress')!.hidden = true;
+  document.querySelector<HTMLElement>('#cancel')!.hidden = true;
+  document.querySelectorAll('[data-export]').forEach(button => (button as HTMLButtonElement).disabled = true);
+  document.querySelectorAll('#review-step, #export-step').forEach(step => step.classList.remove('active'));
+  document.querySelector('#export-summary')!.textContent = 'Review your products, then choose a format.';
   const saved = sessionStorage.getItem('collector-batch') || session.latestBatch;
   if (saved) {
     try { batch = await request<Batch>(`/batches/${saved}`); sessionStorage.setItem('collector-batch', batch.id); render(); }
-    catch { sessionStorage.removeItem('collector-batch'); }
+    catch (error) { sessionStorage.removeItem('collector-batch'); if (error instanceof ApiError && error.status === 401) throw error; }
   }
+  loginScreen.hidden = true; workspace.hidden = false; signOutButton.hidden = !cloudMode;
+  if (!cloudMode) document.querySelector('.local-badge')!.innerHTML = '<span></span> LOCAL WORKSPACE';
+  document.title = 'Product Collector';
+  input.focus();
 }
 function toast(message: string, error = false) {
   const element = document.querySelector<HTMLDivElement>('#toast')!;
@@ -104,6 +153,10 @@ function toast(message: string, error = false) {
 }
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, { ...options, headers: { 'Content-Type': 'application/json', 'X-Session-Token': token, ...options.headers } });
+  if (response.status === 401 && path !== '/login' && cloudMode) {
+    showLogin();
+    document.querySelector('#login-error')!.textContent = 'Your session expired. Sign in again to continue.';
+  }
   return readApiJson<T>(response);
 }
 const urls = () => inputLinks(input.value);
@@ -268,15 +321,33 @@ async function processCloud() {
 }
 document.querySelector('#login-form')!.addEventListener('submit', async event => {
   event.preventDefault();
-  const button = document.querySelector<HTMLButtonElement>('#login-form button')!; button.disabled = true;
+  if (loginButton.disabled) return;
+  loginButton.disabled = true; loginButton.textContent = 'Signing in…'; loginForm.setAttribute('aria-busy', 'true');
   document.querySelector('#login-error')!.textContent = '';
   try {
-    const password = document.querySelector<HTMLInputElement>('#access-password')!;
-    const session = await request<SessionInfo>('/login', { method: 'POST', body: JSON.stringify({ password: password.value }) });
-    password.value = ''; await acceptSession(session);
-  } catch (error) { document.querySelector('#login-error')!.textContent = (error as Error).message; }
-  finally { button.disabled = false; }
+    const session = await request<SessionInfo>('/login', { method: 'POST', body: JSON.stringify({ password: passwordInput.value }) });
+    passwordInput.value = ''; setPasswordVisible(false); await acceptSession(session);
+  } catch (error) { document.querySelector('#login-error')!.textContent = (error as Error).message; passwordInput.focus(); }
+  finally { loginButton.disabled = false; loginButton.innerHTML = `Sign in ${icon('arrow')}`; loginForm.removeAttribute('aria-busy'); }
 });
+function setPasswordVisible(visible: boolean) {
+  passwordInput.type = visible ? 'text' : 'password';
+  const toggle = document.querySelector<HTMLButtonElement>('#toggle-password')!;
+  toggle.textContent = visible ? 'Hide' : 'Show';
+  toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+  toggle.setAttribute('aria-pressed', String(visible));
+}
+document.querySelector('#toggle-password')!.addEventListener('click', () => setPasswordVisible(passwordInput.type === 'password'));
+passwordInput.addEventListener('input', () => { document.querySelector('#login-error')!.textContent = ''; });
+signOutButton.addEventListener('click', async () => {
+  signOutButton.disabled = true; signOutButton.textContent = 'Signing out…';
+  try {
+    await request('/logout', { method: 'POST' });
+    sessionStorage.removeItem('collector-batch');
+    window.location.reload();
+  } catch (error) { toast((error as Error).message, true); signOutButton.disabled = false; signOutButton.textContent = 'Sign out'; }
+});
+retryConnection.addEventListener('click', () => { void init(); });
 document.querySelector('#html-close')!.addEventListener('click', () => { if (!busy) htmlDialog.close(); });
 document.querySelector('#html-form')!.addEventListener('submit', async event => {
   event.preventDefault(); if (!batch || !uploadItemId) return;
@@ -293,6 +364,8 @@ document.querySelector('#html-form')!.addEventListener('submit', async event => 
   finally { button.disabled = false; }
 });
 async function init() {
+  connectionState.hidden = false; connectionState.textContent = 'Checking your session…';
+  retryConnection.hidden = true; loginForm.hidden = true;
   try {
     const response = await fetch('/api/session');
     if (response.status === 401 && response.headers.get('content-type')?.includes('application/json') && (await response.clone().json()).loginRequired) showLogin();
@@ -301,9 +374,10 @@ async function init() {
     token = '';
     document.querySelector<HTMLButtonElement>('#collect')!.disabled = true;
     const message = `Could not connect to the backend. ${error instanceof Error ? error.message : 'Check the server and refresh.'}`;
-    document.querySelector('#input-error')!.textContent = message;
-    toast(message, true);
+    workspace.hidden = true; loginScreen.hidden = false;
+    connectionState.hidden = false; connectionState.textContent = message;
+    retryConnection.hidden = false;
   }
-  void poll();
 }
 void init();
+void poll();
