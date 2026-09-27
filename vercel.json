@@ -3,6 +3,9 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "env": {
+    "NODE_OPTIONS": "--experimental-require-module"
+  },
   "functions": {
     "api/handler.ts": {
       "maxDuration": 300,
