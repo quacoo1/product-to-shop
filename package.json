@@ -1,0 +1,33 @@
+{
+  "name": "product-collector",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/index.ts",
+    "start": "tsx server/index.ts",
+    "build": "tsc --noEmit && vite build",
+    "test": "tsx --test tests/*.test.ts",
+    "browser:install": "playwright install chromium",
+    "check:live": "tsx scripts/check-live.ts",
+    "check:api": "tsx scripts/check-api.ts"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "cheerio": "^1.1.0",
+    "express": "^5.1.0",
+    "ipaddr.js": "^2.2.0",
+    "playwright": "^1.55.0",
+    "sanitize-html": "^2.17.0",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "@types/sanitize-html": "^2.16.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}
