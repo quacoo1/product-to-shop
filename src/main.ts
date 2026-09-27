@@ -29,14 +29,14 @@ app.innerHTML = `
   <header class="topbar"><a class="brand" href="/" aria-label="Product Collector home"><span class="brand-mark">${icon('bag')}</span>product<span class="brand-light">collector</span></a><div class="account-actions"><span class="local-badge"><span></span> YOUR WORKSPACE</span><button id="sign-out" class="secondary compact" hidden>Sign out</button></div></header>
   <main id="login-screen" class="login-screen" aria-labelledby="login-title">
     <section class="login-intro">
-      <span class="eyebrow">A LITTLE LESS ADMIN. A LOT MORE POSSIBILITY.</span>
-      <h1>Your next collection<br>starts here.</h1>
-      <p>Bring your product links together. Fine-tune the details, choose your sizes, and get your next listings ready.</p>
-      <div class="login-workflow" aria-label="Your workflow"><span>${icon('link')} Collect</span><i aria-hidden="true"></i><span>${icon('edit')} Review</span><i aria-hidden="true"></i><span>${icon('download')} Export</span></div>
+      <span class="eyebrow">YOUR COLLECTION, COMING TOGETHER</span>
+      <h1>Good finds.<br><em>Great listings.</em></h1>
+      <p>A little less copying. A little more creating. Bring your favourite products together and make them ready for your store.</p>
+      <ol class="login-workflow" aria-label="Your workflow"><li><span>${icon('link')}</span><div><strong>Start with a link</strong><p>Add your finds, colours, and sizes.</p></div><b>01</b></li><li><span>${icon('edit')}</span><div><strong>Make it yours</strong><p>Review details and choose your images.</p></div><b>02</b></li><li><span>${icon('download')}</span><div><strong>Ready for your store</strong><p>Download your Shopify import files.</p></div><b>03</b></li></ol>
       <div class="login-retailers"><span>MADE FOR YOUR FINDS FROM</span><div>ASOS <b>boohoo</b> PrettyLittleThing</div></div>
     </section>
     <section class="login-card">
-      <div class="login-symbol">${icon('lock')}</div><span class="eyebrow">PRODUCT COLLECTOR</span>
+      <div class="login-symbol">${icon('bag')}</div><span class="eyebrow">YOUR PRIVATE WORKSPACE</span>
       <h2 id="login-title">Welcome back.</h2><p class="login-description">Sign in to collect, review, and export your products.</p>
       <div id="connection-state" class="connection-state" role="status"><span class="working">Checking your session…</span></div>
       <button id="retry-connection" class="secondary full" hidden>Try again ${icon('arrow')}</button>
@@ -49,7 +49,7 @@ app.innerHTML = `
       </form>
       <div class="login-card-footer">${icon('lock')} Your workspace, ready when you are.</div>
     </section>
-    <p class="login-bottom-note">From your favourite finds to your next Shopify drafts.</p>
+    <p class="login-bottom-note">Thoughtfully collected. Ready to make your own.</p>
   </main>
   <main class="workspace" hidden>
     <div class="page-heading"><div><div class="eyebrow">PRODUCT IMPORTS</div><h1>From link to listing.</h1><p>Collect the details. Choose the images. Make it yours.</p></div><div class="steps"><span class="step active"><b>1</b> Collect</span><span class="step-line"></span><span class="step" id="review-step"><b>2</b> Review</span><span class="step-line"></span><span class="step" id="export-step"><b>3</b> Export</span></div></div>
@@ -62,7 +62,8 @@ app.innerHTML = `
           <p id="input-error" class="error-text" role="alert"></p>
           <div id="selection-preview" class="selection-preview" aria-live="polite" hidden></div>
           <button class="primary full" id="collect" disabled>Collect products ${icon('arrow')}</button>
-          <div class="input-caption">${icon('link')} Add sizes to filter · plain links collect all sizes</div>
+          <div class="input-caption">${icon('link')} Plain links collect all sizes</div>
+          <details class="input-guide"><summary>How to add sizes and quantities</summary><p>Put your colour and sizes below each product link. Each size counts as one unit; repeat a size for multiple units.</p><code>White 3 (UK 10, 12, 12)</code><p>This collects one size 10 and two size 12s. We flag quantities that don’t match.</p></details>
         </section>
         <section class="notes-panel"><span class="note-icon">${icon('file')}</span><div><h3>Ready for your Shopify drafts</h3><p>Prices are left out. Shopify defaults them to zero, so add your prices before publishing.</p><p class="small">Inventory tracking is enabled on import. Use the separate inventory CSV to stock a warehouse location, using the quantities in your size notes.</p></div></section>
         <div class="session-note">${icon('browser')} Your batch stays in this session.<br>Download your files before closing the app.</div>
@@ -72,7 +73,7 @@ app.innerHTML = `
           <div id="progress" class="progress-section" hidden></div>
           <div id="results"><div class="empty-state"><div class="empty-symbol">${icon('bag')}</div><span class="eyebrow">A FRESH COLLECTION</span><h3>Your next listings start here</h3><p>Paste product links to collect their details,<br>images, and sizes in one place.</p><div class="empty-tags"><span>${icon('check')} Editable details</span><span>${icon('check')} Original images</span></div></div></div>
         </section>
-        <section class="panel export-panel"><div><div class="eyebrow">TAKE IT TO YOUR STORE</div><h2>Export your collection</h2><p id="export-summary" class="muted">Review your products, then choose a format.</p></div><div class="export-buttons"><button class="primary" data-export="csv" disabled>${icon('download')} Shopify CSV</button><button class="secondary" data-export="json" disabled>JSON</button><button class="secondary" data-export="zip" disabled>${icon('image')} Image ZIP</button></div><p class="export-footnote">CSV imports into Shopify. JSON is for integrations. ZIP includes images and a download report.</p><div class="inventory-export"><h3>Stock a warehouse location</h3><p class="muted">First import the Shopify CSV under Products. Then import this inventory CSV under Products → Inventory → Import.</p><label class="field-label" for="inventory-location">Shopify location name</label><input id="inventory-location" value="Warehouse" maxlength="255" aria-describedby="inventory-help"><button class="secondary" data-export="inventory" disabled>${icon('download')} Inventory CSV</button><p id="inventory-help" class="export-footnote">Match the location name exactly. Each listed size counts as one unit. Repeated sizes add units of that size. Plain links initialize at 0. Quantity mismatches must be corrected before CSV export. Existing stock is protected by Shopify’s current-quantity check and may cause rows to be rejected. Use the same product handles and options as your product import.</p></div></section>
+        <section class="panel export-panel"><div><div class="eyebrow">TAKE IT TO YOUR STORE</div><h2>Export your collection</h2><p id="export-summary" class="muted">Review your products, then choose a format.</p></div><div class="export-buttons"><button class="primary" data-export="csv" disabled>${icon('download')} Shopify CSV</button><button class="secondary" data-export="json" disabled>JSON</button><button class="secondary" data-export="zip" disabled>${icon('image')} Image ZIP</button></div><p class="export-footnote">CSV imports into Shopify. JSON is for integrations. ZIP includes images and a download report.</p><details class="inventory-export"><summary><span>Stock a warehouse location</span><span class="summary-hint">Inventory CSV</span></summary><div class="inventory-body"><p class="muted">First import the Shopify CSV under Products. Then import this inventory CSV under Products → Inventory → Import.</p><label class="field-label" for="inventory-location">Shopify location name</label><input id="inventory-location" value="Warehouse" maxlength="255" aria-describedby="inventory-help"><button class="secondary" data-export="inventory" disabled>${icon('download')} Inventory CSV</button><p id="inventory-help" class="export-footnote">Match the location name exactly. Each listed size counts as one unit. Repeated sizes add units of that size. Plain links initialize at 0. Quantity mismatches must be corrected before CSV export. Existing stock is protected by Shopify’s current-quantity check and may cause rows to be rejected. Use the same product handles and options as your product import.</p></div></details></section>
       </section>
     </div>
     <footer><span>PRODUCT COLLECTOR</span><span>No prices. No automatic publishing. You’re in control.</span></footer>
