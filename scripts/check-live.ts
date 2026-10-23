@@ -6,6 +6,7 @@ const defaults = [
   'https://www.asos.com/asos-design/asos-design-button-down-rib-with-picot-trim-midi-dress-in-black/prd/209696517',
   'https://www.boohoo.com/product/boohoo-contrast-lace-cut-out-mini-dress_gzz26440',
   'https://www.prettylittlething.com/product/prettylittlething-prettylittlething-beauty-advent-calendar-2026---worth-297_ydd23636?colour=multi',
+  'https://www.fashionnova.com/products/deana-off-shoulder-satin-maxi-dress-fncolorname-red',
 ];
 await mkdir('.local/live', { recursive: true });
 for (const input of process.argv.slice(2).length ? process.argv.slice(2) : defaults) {

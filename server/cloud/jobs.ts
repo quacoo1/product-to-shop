@@ -126,7 +126,7 @@ export class CloudJobs {
             await this.imageValidator(product, signal);
           } else product = await this.extractor(resolvedUrl, candidate.retailer, signal, candidate.selection?.color);
           signal.throwIfAborted();
-          product = applySelection(product, candidate.selection);
+          product = applySelection(product, candidate.selection, candidate.titleOverride);
         } catch (failure) {
           error = signal.aborted ? 'Extraction exceeded three minutes. Retry or upload the saved product page.' : failure instanceof Error ? failure.message : 'Extraction failed.';
         }

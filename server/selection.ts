@@ -1,5 +1,5 @@
 import type { Product, RequestedSelection } from '../shared/types.js';
-import { sameColor } from './adapters/common.js';
+import { sameColor, textOnly } from './adapters/common.js';
 import { quantityErrors } from '../shared/input.js';
 
 export function withRequestedColor(input: string, color?: string): string {
@@ -14,10 +14,13 @@ export function withRequestedColor(input: string, color?: string): string {
 
 // Bare numeric retailer labels are UK sizes only on a UK storefront.
 function sizeKey(size: string, allowBare: boolean): string | undefined {
-  const match = /^UK\s*(\d{1,2})$/i.exec(size.trim()) ?? (allowBare ? /^(\d{1,2})$/.exec(size.trim()) : null);
-  return match ? String(Number(match[1])) : undefined;
+  const value = size.trim();
+  const numeric = /^UK\s*(\d{1,2})$/i.exec(value) ?? (allowBare ? /^(\d{1,2})$/.exec(value) : null);
+  if (numeric) return String(Number(numeric[1]));
+  return /^(?=.{1,4}$)(?=.*[a-z])[a-z\d]+$/i.test(value) ? value.toUpperCase() : undefined;
 }
-export function applySelection(product: Product, selection?: RequestedSelection): Product {
+export function applySelection(product: Product, selection?: RequestedSelection, titleOverride?: string): Product {
+  if (titleOverride) product.title = textOnly(titleOverride);
   if (!selection) return product;
   product.requestedSelection = structuredClone(selection);
   const url = new URL(product.sourceUrl);

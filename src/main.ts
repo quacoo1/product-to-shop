@@ -23,7 +23,7 @@ const icon = (name: string, cls = '') => {
   return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.file}</svg>`;
 };
 const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]!));
-const retailerName = (retailer?: string) => ({ asos: 'ASOS', boohoo: 'Boohoo', prettylittlething: 'PrettyLittleThing' }[retailer ?? ''] || 'Link');
+const retailerName = (retailer?: string) => ({ asos: 'ASOS', boohoo: 'Boohoo', prettylittlething: 'PrettyLittleThing', fashionnova: 'Fashion Nova' }[retailer ?? ''] || 'Link');
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <header class="topbar"><a class="brand" href="/" aria-label="Product Collector home"><span class="brand-mark">${icon('bag')}</span>product<span class="brand-light">collector</span></a><div class="account-actions"><span class="local-badge"><span></span> YOUR WORKSPACE</span><button id="sign-out" class="secondary compact" hidden>Sign out</button></div></header>
@@ -33,7 +33,7 @@ app.innerHTML = `
       <h1>Good finds.<br><em>Great listings.</em></h1>
       <p>A little less copying. A little more creating. Bring your favourite products together and make them ready for your store.</p>
       <ol class="login-workflow" aria-label="Your workflow"><li><span>${icon('link')}</span><div><strong>Start with a link</strong><p>Add your finds, colours, and sizes.</p></div><b>01</b></li><li><span>${icon('edit')}</span><div><strong>Make it yours</strong><p>Review details and choose your images.</p></div><b>02</b></li><li><span>${icon('download')}</span><div><strong>Ready for your store</strong><p>Download your Shopify import files.</p></div><b>03</b></li></ol>
-      <div class="login-retailers"><span>MADE FOR YOUR FINDS FROM</span><div>ASOS <b>boohoo</b> PrettyLittleThing</div></div>
+      <div class="login-retailers"><span>MADE FOR YOUR FINDS FROM</span><div>ASOS <b>boohoo</b> PrettyLittleThing Fashion Nova</div></div>
     </section>
     <section class="login-card">
       <div class="login-symbol">${icon('bag')}</div><span class="eyebrow">YOUR PRIVATE WORKSPACE</span>
@@ -55,15 +55,15 @@ app.innerHTML = `
     <div class="page-heading"><div><div class="eyebrow">PRODUCT IMPORTS</div><h1>From link to listing.</h1><p>Collect the details. Choose the images. Make it yours.</p></div><div class="steps"><span class="step active"><b>1</b> Collect</span><span class="step-line"></span><span class="step" id="review-step"><b>2</b> Review</span><span class="step-line"></span><span class="step" id="export-step"><b>3</b> Export</span></div></div>
     <div class="workspace-grid">
       <aside class="input-column">
-        <section class="panel input-panel"><div class="panel-title"><h2>Add product links</h2><span class="number-pill">01</span></div><p class="muted">Paste product links or share messages with colour and UK size notes.</p>
-          <div class="retailers"><span>ASOS</span><span>boohoo</span><span>PrettyLittleThing</span></div>
+        <section class="panel input-panel"><div class="panel-title"><h2>Add product links</h2><span class="number-pill">01</span></div><p class="muted">Paste product links with an optional replacement name, colour, and size notes.</p>
+          <div class="retailers"><span>ASOS</span><span>boohoo</span><span>PrettyLittleThing</span><span>Fashion Nova</span></div>
           <label class="field-label" for="links">Links and sizes <span id="link-count">0 / 50</span></label>
           <textarea id="links" spellcheck="false" placeholder="Check out this item I found on Boohoo https://bhoo.mobi/…&#10;White (UK 14,16,18)&#10;Cream floral (UK 10,12)&#10;Brown uk (16,16)" rows="9"></textarea>
           <p id="input-error" class="error-text" role="alert"></p>
           <div id="selection-preview" class="selection-preview" aria-live="polite" hidden></div>
           <button class="primary full" id="collect" disabled>Collect products ${icon('arrow')}</button>
           <div class="input-caption">${icon('link')} Plain links collect all sizes</div>
-          <details class="input-guide"><summary>How to add sizes and quantities</summary><p>Put your colour and sizes below each product link. Each size counts as one unit; repeat a size for multiple units.</p><code>White 3 (UK 10, 12, 12)</code><p>This collects one size 10 and two size 12s. We flag quantities that don’t match.</p></details>
+          <details class="input-guide"><summary>How to add names, sizes and quantities</summary><p>To replace the retailer title, put the product name on the first line after its link. Put colour and sizes below it. Each size counts as one unit; repeat a size for multiple units.</p><code>Dean maxi dress<br>White 3 (UK 10, 12, 12)</code><p>This collects one size 10 and two size 12s. Named sizes such as <code>6(S M L XL 1X 2X)</code> also work. We flag quantities that don’t match.</p></details>
         </section>
         <section class="notes-panel"><span class="note-icon">${icon('file')}</span><div><h3>Ready for your Shopify drafts</h3><p>Prices are left out. Shopify defaults them to zero, so add your prices before publishing.</p><p class="small">Inventory tracking is enabled on import. Use the separate inventory CSV to stock a warehouse location, using the quantities in your size notes.</p></div></section>
         <div class="session-note">${icon('browser')} Your batch stays in this session.<br>Download your files before closing the app.</div>
@@ -173,7 +173,7 @@ input.addEventListener('input', () => {
       const s = r.selection!;
       const counts = [...new Set(s.sizes)].map(size => `${size} × ${s.sizes.filter(v => v === size).length}`).join(', ');
       const errors = quantityErrors(s);
-      return `<div><strong>${escape(s.color || 'Linked colour')}</strong><p>${escape(counts)} · ${s.sizes.length} units</p>${errors.map(e => `<p class="error-text">${escape(e)}</p>`).join('')}</div>`;
+      return `<div><strong>${escape(r.titleOverride || s.color || 'Linked colour')}</strong>${r.titleOverride && s.color ? `<p>${escape(s.color)}</p>` : ''}<p>${escape(counts)} · ${s.sizes.length} units</p>${errors.map(e => `<p class="error-text">${escape(e)}</p>`).join('')}</div>`;
     }).join('');
   } catch (error) { preview.hidden = false; preview.textContent = (error as Error).message; }
 });

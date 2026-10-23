@@ -50,6 +50,18 @@ test('Plain URLs, share messages without notes, inline notes and malformed notes
   assert.throws(() => parseProductInput(Array(51).fill(url).join('\n')), /50/);
 });
 
+test('A supplied product name overrides the extracted title and supports named sizes', () => {
+  const [entry] = parseProductInput(`${url}\nDean maxi dress\n6(S M L XL 1X 2X)`);
+  assert.equal(entry.titleOverride, 'Dean maxi dress');
+  assert.deepEqual(entry.selection?.sizes, ['S', 'M', 'L', 'XL', '1X', '2X']);
+  const p = product();
+  p.variants = ['S', 'M', 'L', 'XL', '1X', '2X'].map(size => ({ id: size, size, availability: 'unknown' }));
+  applySelection(p, entry.selection, entry.titleOverride);
+  assert.equal(p.title, 'Dean maxi dress');
+  assert.equal(p.variants.length, 6);
+  assert.deepEqual(p.selectionErrors, []);
+});
+
 test('Requested colour overrides resolved link colour and preserves region', () => {
   const requested = new URL(withRequestedColor(`${url}?color=black&country=GB&colourwayid=123`, 'Hot Pink'));
   assert.equal(requested.searchParams.get('colour'), 'Hot Pink');

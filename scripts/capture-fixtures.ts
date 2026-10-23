@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { load } from 'cheerio';
 import { assignment, schemaProduct, remixRoute } from '../server/adapters/common.js';
 await mkdir('tests/fixtures', { recursive: true });
-for (const [file, retailer] of [['asos','asos'],['boohoo','boohoo'],['plt-product','prettylittlething']]) {
+for (const [file, retailer] of [['asos','asos'],['boohoo','boohoo'],['plt-product','prettylittlething'],['fashionnova-product','fashionnova']]) {
   const html = await readFile(`.local/samples/${file}.html`, 'utf8');
   const schema = schemaProduct(load(html));
   delete schema.offers;
@@ -13,6 +13,8 @@ for (const [file, retailer] of [['asos','asos'],['boohoo','boohoo'],['plt-produc
     const product = Object.fromEntries(['id','name','productCode','productType','brandName','variants','images'].map(k => [k,p[k]]));
     const stock = assignment(html, 'window.asos.pdp.config.stockPriceResponse').map((p: any) => ({ productId:p.productId, variants:p.variants.map((v: any)=>({id:v.id,isInStock:v.isInStock})) }));
     fixture += `<script>window.asos.pdp.config.product = ${JSON.stringify(product)};\nwindow.asos.pdp.config.stockPriceResponse = '${JSON.stringify(stock)}';\nwindow.asos.pdp.config.productDescription = ${JSON.stringify(assignment(html, 'window.asos.pdp.config.productDescription'))};</script>`;
+  } else if (retailer === 'fashionnova') {
+    fixture += `<div data-testid="product-details-text">${load(html)('[data-testid="product-details-text"]').first().html() ?? ''}</div>`;
   } else {
     const route = remixRoute(html)!;
     const product = { id:route.product.id, key:route.product.key, name:route.product.name, description:route.product.description,

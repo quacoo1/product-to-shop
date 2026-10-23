@@ -17,6 +17,7 @@ const urls = {
   asos: 'https://www.asos.com/asos-design/dress/prd/209696517',
   boohoo: 'https://www.boohoo.com/product/boohoo-contrast-lace-cut-out-mini-dress_gzz26440',
   prettylittlething: 'https://www.prettylittlething.com/product/prettylittlething-prettylittlething-beauty-advent-calendar-2026---worth-297_ydd23636?colour=multi',
+  fashionnova: 'https://www.fashionnova.com/products/deana-off-shoulder-satin-maxi-dress-fncolorname-red',
 };
 const fixture = (retailer: Retailer) => readFileSync(new URL(`./fixtures/${retailer}.html`, import.meta.url), 'utf8');
 const product = (retailer: Retailer = 'asos') => parseProduct(fixture(retailer), urls[retailer], retailer);
@@ -50,6 +51,15 @@ test('PrettyLittleThing adapter reads current product data and listed size', () 
   assert.equal(p.retailer,'prettylittlething'); assert.ok(p.variants.length > 0); assert.ok(p.images.length > 0);
   assert.equal(p.color,'Multi'); assert.ok(p.description.length > 100);
 });
+test('Fashion Nova reads ProductGroup details, path color, images, and named sizes', () => {
+  const p = product('fashionnova');
+  assert.equal(p.sourceId, '34398BG'); assert.equal(p.productCode, '34398BG'); assert.equal(p.color, 'Red');
+  assert.equal(p.variants.length, 8); assert.equal(p.images.length, 4);
+  assert.deepEqual(p.variants.map(v => v.size), ['XS','S','M','L','XL','1X','2X','3X']);
+  assert.ok(p.variants.every(v => v.availability === 'sold_out' && v.sku?.startsWith('34398BG_Red_')));
+  assert.match(p.description, /Off Shoulder Neckline/); assert.match(p.description, /97% Polyester 3% Spandex/);
+  assert.throws(() => parseProduct(fixture('fashionnova'), `${urls.fashionnova}?color=blue`, 'fashionnova'), /linked color was not found/);
+});
 test('Malformed schema is skipped; embedded product data still works', () => {
   const html = fixture('asos').replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/, '<script type="application/ld+json">{bad}</script>');
   const p = parseProduct(html, urls.asos, 'asos'); assert.equal(p.variants.length,8); assert.match(p.title,/ASOS DESIGN/);
@@ -69,6 +79,13 @@ test('Tracking and selected size deduplicate while color and region are preserve
   assert.equal(productUrl(`${urls.boohoo}?size=8&utm_source=test`).key,productUrl(urls.boohoo).key);
   assert.notEqual(productUrl(`${urls.boohoo}?colour=black`).key,productUrl(`${urls.boohoo}?colour=pink`).key);
   assert.equal(productUrl('https://www.prettylittlething.com/black-dress.html').retailer,'prettylittlething');
+  const fashionNova = productUrl(`${urls.fashionnova}?variant=123&utm_source=test`);
+  assert.equal(fashionNova.retailer, 'fashionnova'); assert.equal(fashionNova.url, urls.fashionnova);
+});
+
+test('Fashion Nova accepts only product paths, including localized storefronts', () => {
+  assert.equal(productUrl('https://www.fashionnova.com/en-gb/products/deana-dress?color=red').retailer, 'fashionnova');
+  for (const input of ['https://www.fashionnova.com/', 'https://www.fashionnova.com/collections/dresses', 'https://www.fashionnova.com/products/a/extra', 'https://fashionnova.com.evil.com/products/dress']) assert.throws(() => productUrl(input));
 });
 
 test('Official PLT share links are accepted without accepting lookalike domains or arbitrary paths', () => {
@@ -178,7 +195,7 @@ test('Every variant enables Shopify inventory tracking; extra image rows do not 
 });
 
 test('CSV and JSON use the specified retailer vendor instead of the product brand',()=>{
-  for(const [retailer,vendor] of [['asos','ASOS'],['boohoo','Boohoo'],['prettylittlething','Pretty Little Thing']] as const){
+  for(const [retailer,vendor] of [['asos','ASOS'],['boohoo','Boohoo'],['prettylittlething','Pretty Little Thing'],['fashionnova','Fashion Nova']] as const){
     const p=product(retailer);p.title='Test';p.description='';p.brand='A different product brand';p.productType='Dress';
     const row=toCsv(batch(p)).split('\n')[1].split(',');
     assert.equal(row[CSV_HEADERS.indexOf('Vendor')],vendor);
@@ -191,7 +208,7 @@ test('Image validation recognizes actual image signatures instead of HTML with a
 });
 
 test('Warehouse CSV matches product variants and initializes only the specified unstocked location', () => {
-  for (const retailer of ['asos','boohoo','prettylittlething'] as const) {
+  for (const retailer of ['asos','boohoo','prettylittlething','fashionnova'] as const) {
     const p = product(retailer); p.title = 'Test'; p.description = ''; p.productType = '';
     const b = batch(p);
     b.items.push({ ...b.items[0], id: 'duplicate' });
@@ -237,10 +254,10 @@ test('Mixed batch validates input, deduplicates, enforces concurrency, isolates 
     try {await pause(20);signal.throwIfAborted();if(r==='boohoo'&&fail)throw new Error('Verification needed');return {...product(r),id:url};}
     finally{active.delete(r);parallel--;}
   });
-  const b=jobs.create([urls.asos,urls.asos,`${urls.asos}?country=US`,urls.boohoo,urls.prettylittlething,'invalid']);
-  await finished(jobs,b.id);assert.equal(b.duplicates,1);assert.ok(max<=2);assert.equal(b.items.filter(i=>i.status==='success').length,3);
+  const b=jobs.create([urls.asos,urls.asos,`${urls.asos}?country=US`,urls.boohoo,urls.prettylittlething,urls.fashionnova,'invalid']);
+  await finished(jobs,b.id);assert.equal(b.duplicates,1);assert.ok(max<=2);assert.equal(b.items.filter(i=>i.status==='success').length,4);
   assert.equal(b.items.find(i=>i.retailer==='boohoo')!.status,'needs_browser');assert.equal(b.items.find(i=>i.url==='invalid')!.status,'failed');
-  fail=false;jobs.retry(b.id,b.items.find(i=>i.retailer==='boohoo')!.id);await finished(jobs,b.id);assert.equal(b.items.filter(i=>i.status==='success').length,4);
+  fail=false;jobs.retry(b.id,b.items.find(i=>i.retailer==='boohoo')!.id);await finished(jobs,b.id);assert.equal(b.items.filter(i=>i.status==='success').length,5);
 });
 test('Cancellation stops pending work and retains already extracted products', async () => {
   const jobs=new Jobs(async (_url,r,signal)=>{await pause(40);signal.throwIfAborted();return product(r);});

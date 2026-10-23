@@ -36,7 +36,7 @@ export class Jobs {
         runtime.controllers.set(item.id, controller); runtime.active.add(item.id);
         this.reservations.add(item.retailer); this.activeCount++; item.status = 'extracting'; delete item.error;
         void this.extractor(item.url, item.retailer, controller.signal, item.selection?.color).then(product => {
-          if (!controller.signal.aborted) { item.product = applySelection(product, item.selection); item.status = 'success'; this.deduplicate(runtime.batch, item); }
+          if (!controller.signal.aborted) { item.product = applySelection(product, item.selection, item.titleOverride); item.status = 'success'; this.deduplicate(runtime.batch, item); }
         }).catch(error => {
           if (!controller.signal.aborted) { item.status = 'needs_browser'; item.error = (error as Error).message; }
         }).finally(() => {
@@ -105,7 +105,7 @@ export class Jobs {
       const product = parseProduct(await current.session.page.content(), sourceUrl, item.retailer!);
       await this.imageValidator(product, current.controller.signal);
       current.controller.signal.throwIfAborted();
-      item.product = applySelection(product, item.selection); item.status = 'success'; delete item.error; this.deduplicate(this.get(batchId).batch, item);
+      item.product = applySelection(product, item.selection, item.titleOverride); item.status = 'success'; delete item.error; this.deduplicate(this.get(batchId).batch, item);
     } catch (error) { item.status = current.controller.signal.aborted ? 'cancelled' : 'needs_browser'; item.error = (error as Error).message; }
     finally { await this.closeBrowser(); this.pump(); }
     return this.get(batchId).batch;

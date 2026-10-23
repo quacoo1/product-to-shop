@@ -5,6 +5,7 @@ const domains: Record<Retailer, string[]> = {
   asos: ['asos.com'],
   boohoo: ['boohoo.com'],
   prettylittlething: ['prettylittlething.com', 'prettylittlething.us', 'prettylittlething.com.au', 'prettylittlething.fr', 'prettylittlething.ie', 'prettylittlething.ae'],
+  fashionnova: ['fashionnova.com'],
 };
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 12);
 export const slug = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 90);
@@ -21,10 +22,11 @@ export function productUrl(input: string): { url: string; retailer: Retailer; ke
   if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) throw new Error('Only standard HTTPS product links are supported.');
   const shortLink = shortLinkRetailer(url);
   const retailer = shortLink ?? retailerFor(url);
-  if (!retailer) throw new Error('Use an ASOS, Boohoo, or PrettyLittleThing product link.');
+  if (!retailer) throw new Error('Use an ASOS, Boohoo, PrettyLittleThing, or Fashion Nova product link.');
   const path = url.pathname;
   const valid = shortLink ? /^\/[a-zA-Z0-9]{1,100}\/?$/.test(path) : retailer === 'asos' ? /\/prd\/\d+/i.test(path)
     : retailer === 'boohoo' ? /\/product\/[^/]+/i.test(path) || /\/[\w-]+\/[^/]+\.html$/i.test(path) || /\/[\w-]+\.html$/i.test(path)
+    : retailer === 'fashionnova' ? /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/[^/]+\/?$/i.test(path)
     : /\/product\/[^/]+/i.test(path) || /\/[^/]+\.html$/i.test(path);
   if (!valid) throw new Error(shortLink ? 'Paste the complete product share link, including the code after the domain.' : 'This looks like a category or home page. Paste a product detail link.');
   url.hash = '';

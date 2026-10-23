@@ -1,8 +1,9 @@
-export type Retailer = 'asos' | 'boohoo' | 'prettylittlething';
+export type Retailer = 'asos' | 'boohoo' | 'prettylittlething' | 'fashionnova';
 export const RETAILER_VENDORS: Record<Retailer, string> = {
   asos: 'ASOS',
   boohoo: 'Boohoo',
   prettylittlething: 'Pretty Little Thing',
+  fashionnova: 'Fashion Nova',
 };
 export type Availability = 'available' | 'sold_out' | 'unknown';
 export interface RequestedSelection {
@@ -11,7 +12,7 @@ export interface RequestedSelection {
   notes: string[];
   quantityChecks?: { scope: 'product' | 'colour'; expected: number; actual: number }[];
 }
-export interface ProductInput { url: string; selection?: RequestedSelection; }
+export interface ProductInput { url: string; titleOverride?: string; selection?: RequestedSelection; }
 export interface Variant {
   requestedQuantity?: number;
   id: string;
@@ -51,6 +52,7 @@ export interface Product {
 export type ItemStatus = 'queued' | 'extracting' | 'needs_browser' | 'awaiting_user' | 'success' | 'failed' | 'cancelled';
 export interface ExtractionResult {
   resolvedUrl?: string;
+  titleOverride?: string;
   selection?: RequestedSelection;
   id: string;
   url: string;

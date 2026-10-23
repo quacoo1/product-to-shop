@@ -10,7 +10,7 @@ export function buildBatch(input: string[] | string): Batch {
   const seen = new Map<string, ExtractionResult>();
   let duplicates = 0;
   const items: ExtractionResult[] = [];
-  for (const { url: raw, selection } of requests) {
+  for (const { url: raw, titleOverride, selection } of requests) {
     const id = randomUUID();
     try {
       const normalized = productUrl(raw);
@@ -27,9 +27,9 @@ export function buildBatch(input: string[] | string): Batch {
         } else delete existing.selection;
         continue;
       }
-      const item: ExtractionResult = { id, url: normalized.url, selection, retailer: normalized.retailer, status: 'queued' };
+      const item: ExtractionResult = { id, url: normalized.url, titleOverride, selection, retailer: normalized.retailer, status: 'queued' };
       seen.set(key, item); items.push(item);
-    } catch (error) { items.push({ id, url: raw, selection, status: 'failed', error: (error as Error).message }); }
+    } catch (error) { items.push({ id, url: raw, titleOverride, selection, status: 'failed', error: (error as Error).message }); }
   }
   return { id: randomUUID(), createdAt: new Date().toISOString(), items, duplicates, cancelled: false, running: items.some(i => i.status === 'queued') };
 }

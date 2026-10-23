@@ -19,27 +19,37 @@ export function parseProductInput(text: string): ProductInput[] {
     const groups: RequestedSelection[] = [];
     const notes: string[] = [];
     const totals: number[] = [];
+    let titleOverride: string | undefined;
     for (const raw of tail.split(/\r?\n/)) {
       const line = raw.trim();
       if (!line) continue;
       if (/^\d+$/.test(line)) { notes.push(line); totals.push(Number(line)); continue; }
       // Both "White (uk 14,16)" and "Brown uk (16,16)" are accepted.
-      const match = /^(.*?)\(\s*(?:uk\s*)?([\d\s,]+)\s*\)\s*$/i.exec(line);
-      if (!match) throw new Error(`Could not read the size note "${line}". Use e.g. White (UK 10,12).`);
+      const match = /^(.*?)\(\s*(?:uk\s*)?([a-z\d\s,]+)\s*\)\s*$/i.exec(line);
+      if (!match) {
+        if (!titleOverride && !groups.length && !notes.length && !/[()]/.test(line) && !/^[\d\s,]+$/.test(line)) {
+          if (line.length > 500) throw new Error('The supplied product name is too long.');
+          titleOverride = line;
+          continue;
+        }
+        throw new Error(`Could not read the size note "${line}". Use e.g. White (UK 10,12).`);
+      }
       const prefix = match[1].replace(/\buk\s*$/i, '').trim();
       const count = /\d+\s*$/.exec(prefix);
       const color = prefix.replace(/\s*\d+\s*$/, '').trim();
       const sizes = match[2].split(/[\s,]+/).filter(Boolean);
-      if (!sizes.length || sizes.some(size => !/^\d{1,2}$/.test(size))) throw new Error(`Invalid sizes in "${line}".`);
-      groups.push({ ...(color ? { color } : {}), sizes: sizes.map(size => `UK ${Number(size)}`), notes: [line],
+      const numericSizes = sizes.every(size => /^\d{1,2}$/.test(size));
+      const namedSizes = sizes.every(size => /^(?=.{1,4}$)(?=.*[a-z])[a-z\d]+$/i.test(size) && !/^uk$/i.test(size));
+      if (!sizes.length || (!numericSizes && !namedSizes)) throw new Error(`Invalid sizes in "${line}".`);
+      groups.push({ ...(color ? { color } : {}), sizes: sizes.map(size => numericSizes ? `UK ${Number(size)}` : size.toUpperCase()), notes: [line],
         ...(count ? { quantityChecks: [{ scope: 'colour', expected: Number(count[0]), actual: sizes.length }] } : {}) });
     }
     if (!groups.length && notes.length) throw new Error(`Add sizes in brackets after ${url}.`);
-    if (!groups.length) entries.push({ url });
+    if (!groups.length) entries.push({ url, ...(titleOverride ? { titleOverride } : {}) });
     else for (const group of groups) {
       const checks = [...(group.quantityChecks ?? []), ...totals.map(expected => ({ scope: 'product' as const, expected, actual: groups.reduce((n, g) => n + g.sizes.length, 0) }))];
       if (checks.some(c => !Number.isSafeInteger(c.expected) || c.expected < 1)) throw new Error('Quantities must be positive whole numbers.');
-      entries.push({ url, selection: { ...group, notes: [...notes, ...group.notes], ...(checks.length ? { quantityChecks: checks } : {}) } });
+      entries.push({ url, ...(titleOverride ? { titleOverride } : {}), selection: { ...group, notes: [...notes, ...group.notes], ...(checks.length ? { quantityChecks: checks } : {}) } });
     }
   });
   if (entries.length > 50) throw new Error('Use at most 50 product and colour groups per batch.');

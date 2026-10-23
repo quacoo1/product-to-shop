@@ -1,6 +1,6 @@
 # Product Collector
 
-A browser app for collecting product details, gallery images, and sizes from ASOS, Boohoo, and PrettyLittleThing. Run locally or deploy to Vercel with Redis storage. Paste up to 50 product links, review the results, and download Shopify CSV, structured JSON, or an image ZIP.
+A browser app for collecting product details, gallery images, and sizes from ASOS, Boohoo, PrettyLittleThing, and Fashion Nova. Run locally or deploy to Vercel with Redis storage. Paste up to 50 product links, review the results, and download Shopify CSV, structured JSON, or an image ZIP.
 
 ## Deploy to Vercel
 
@@ -55,13 +55,13 @@ If the default port is already in use, close the other Product Collector termina
 
 ## Collect and review
 
-1. Paste product links or complete share messages with colour and UK size notes. Mix all three retailers in a batch.
+1. Paste product links or complete share messages with an optional replacement product name, colour, and size notes. Put the replacement name on the first line after its link; it replaces the retailer's title in review and exports. Mix all four retailers in a batch.
    PrettyLittleThing `https://plt.mobi/…` and Boohoo `https://bhoo.mobi/…` share links are supported. Include the full share code after the domain. They are resolved to the same retailer's full product URL while preserving its selected color and region. Expired links and links that lead to a category page are reported as failures.
 2. Click **Collect products**. Duplicate links and tracking parameters are removed; color and region selections are preserved.
 3. Click **Review** to edit the title, description, brand, and product type, inspect sizes, and exclude images. Uncheck a product to exclude it from exports.
 4. Download **Shopify CSV**, **JSON**, or **Image ZIP**. Completed products can be exported while other links are still running.
 
-Descriptions use the site's **Product Details** content. ASOS descriptions preserve its feature bullets, product code, care instructions, fabric composition, and brand text. Boohoo and PLT preserve their product description and Product Details & Care content. Formatting is sanitized, without rewriting the text. Shipping, payment, and recommendation sections are excluded. You can edit the description before exporting.
+Descriptions use the site's **Product Details** content. ASOS descriptions preserve its feature bullets, product code, care instructions, fabric composition, and brand text. Boohoo and PLT preserve their product description and Product Details & Care content. Fashion Nova preserves its Product Details list. Formatting is sanitized, without rewriting the text. Shipping, payment, and recommendation sections are excluded. You can edit the description before exporting.
 
 Plain links collect the linked colour and every listed size, including sold-out sizes. Size notes collect only the requested sizes and colours, with separate results for each colour. Size labels remain as the retailer displays them. Unknown availability stays unknown. Retailer stock quantities are never inferred.
 
@@ -71,13 +71,14 @@ Paste notes below their product link, for example:
 
 ```text
 Check out this item I found on Boohoo https://bhoo.mobi/example123
+Dean maxi dress
 7
 White (uk 14,16,18)
 Cream floral ( uk 10,12)
 Brown uk (16,16)
 ```
 
-Each size occurrence represents one unit: Brown UK 16 above becomes one variant with quantity 2. A standalone number checks the whole product's total; a number before brackets checks that colour's total. `2(Uk 10 12)` and `Burnt orange 3(uk 10,12,)` are supported, as are mixed commas/spaces, trailing commas, and UK inside or outside brackets. `3(12,12)` flags expected 3 versus listed 2. Counts never fill in missing units or override the size list.
+Each size occurrence represents one unit: Brown UK 16 above becomes one variant with quantity 2. Numeric UK sizes and named sizes such as `6(S M L XL 1X 2X)` are supported. A standalone number checks the whole product's total; a number before brackets checks that colour's total. `2(Uk 10 12)` and `Burnt orange 3(uk 10,12,)` are supported, as are mixed commas/spaces, trailing commas, and UK inside or outside brackets. `3(12,12)` flags expected 3 versus listed 2. Counts never fill in missing units or override the size list.
 
 The input preview shows size quantities and mismatches. Correct mismatches in the input and collect again before exporting either CSV. Missing requested sizes or unverified colours also block CSV export. JSON retains the original notes, quantity checks, requested quantities and errors. Plain links still initialize inventory at zero. Explicit size notes provide quantities only to the separate inventory CSV, never the product CSV. UK requests match explicit UK labels or bare numeric labels on a UK storefront; the app does not convert foreign sizes.
 
@@ -157,7 +158,7 @@ The local API uses a per-process session token from `GET /api/session` in `X-Ses
 
 ## Implementation layout
 
-- `server/adapters/`: ASOS, Boohoo, and PLT extraction and shared parsers.
+- `server/adapters/`: ASOS, Boohoo, PLT, and Fashion Nova extraction and shared parsers.
 - `api/handler.ts`, `vercel.json`: Vercel function entry point and routing.
 - `server/cloud/`: Redis state, cloud sessions, resumable processing, and upload retry.
 - `server/jobs.ts`, `server/browser.ts`, `server/network.ts`: queue, assisted browser, and guarded network requests.
